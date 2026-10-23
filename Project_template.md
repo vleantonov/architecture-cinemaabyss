@@ -301,7 +301,9 @@ cat .docker/config.json | base64
   ```bash
   minikube tunnel
   ```
-  11. Вызовите https://cinemaabyss.example.com/api/movies
+  Используем HTTP без TLS: сертификат и TLS Secret не требуются.
+
+  11. Вызовите http://cinemaabyss.example.com/api/movies
   Вы должны увидеть вывод списка фильмов
   Можно поэкспериментировать со значением   MOVIES_MIGRATION_PERCENT в src/kubernetes/configmap.yaml и убедится, что вызовы movies уходят полностью в новый сервис
 
@@ -313,7 +315,7 @@ cat .docker/config.json | base64
   Откройте логи event-service и сделайте скриншот обработки событий
 
 #### Шаг 3
-Добавьте сюда скриншота вывода при вызове https://cinemaabyss.example.com/api/movies и  скриншот вывода event-service после вызова тестов.
+Добавьте сюда скриншота вывода при вызове http://cinemaabyss.example.com/api/movies и  скриншот вывода event-service после вызова тестов.
 
 ![Screenshot](assets/logs_screen.png)
 
@@ -389,8 +391,37 @@ minikube tunnel
 ```
 
 Потом вызовите 
-https://cinemaabyss.example.com/api/movies
-и приложите скриншот развертывания helm и вывода https://cinemaabyss.example.com/api/movies
+http://cinemaabyss.example.com/api/movies
+и приложите скриншот развертывания helm и вывода http://cinemaabyss.example.com/api/movies
+
+### Выполнение задания 4
+
+Заполнены Helm-шаблоны Deployment и Service для proxy и events. Для них используются
+образы `ghcr.io/vleantonov/architecture-cinemaabyss/{proxy-service,events-service}:latest`.
+Для monolith и movies сохранены исходные образы из `ghcr.io/db-exp/cinemaabysstest`.
+Восстановлены исходные настройки NGINX Ingress без TLS и образ ZooKeeper
+`wurstmeister/zookeeper:latest`. В `dockerconfigjson` указан корректный пустой
+Docker config `{"auths":{}}` в Base64 для публичных образов. Инструкция по установке и обновлению —
+в [README чарта](src/kubernetes/helm/README.md).
+
+Архив результатов предыдущей конфигурации (HTTPS). Эти результаты не являются
+проверкой текущей конфигурации HTTP.
+
+Проверено 23.10.2026 в Minikube после удаления ручной установки
+(до возврата исходных настроек Ingress и ZooKeeper и образов monolith и movies;
+при проверке использовались Docker config `{"auths":{}}`, Traefik с TLS,
+`zookeeper:3.8` и все четыре образа
+приложений из `ghcr.io/vleantonov/architecture-cinemaabyss`):
+
+- `helm lint --strict` и проверка схем Kubernetes: 21 ресурс без ошибок.
+- `helm install --wait`: статус `deployed`, все 7 Pod готовы.
+- HTTPS через `minikube tunnel`: `/api/movies` вернул HTTP 200 и список фильмов.
+- Postman: 22 запроса, 42 проверки, ошибок нет, включая health-check.
+  В логах events подтверждена обработка событий User, Movie и Payment из Kafka.
+  Файлы в `tests/postman` не изменялись; запуск выполнен на Node.js 22
+  с отдельным окружением, указывающим на HTTPS Ingress, и доверенным локальным сертификатом.
+- `helm upgrade` с `config.moviesMigrationPercent=100`: создан новый Pod proxy,
+  в его логе указано `movies migration: 100%`, API продолжил отвечать HTTP 200.
 
 ## Удаляем все
 
@@ -398,3 +429,6 @@ https://cinemaabyss.example.com/api/movies
 kubectl delete all --all -n cinemaabyss
 kubectl delete namespace cinemaabyss
 ```
+
+Учебный Helm-релиз и namespace `cinemaabyss` вместе с PVC удалены после проверки.
+Traefik в отдельном namespace сохранён. До повторной установки API недоступен.
