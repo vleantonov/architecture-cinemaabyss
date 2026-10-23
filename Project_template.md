@@ -1,3 +1,10 @@
+> [!NOTE]
+> **Использование AI в работе**
+>
+> 1. AI использовался для визуализации архитектурной диаграммы. Все связи между компонентами задавались автором в промпте.
+> 2. Запуск тестов осуществлялся через AI.
+> 3. AI создавал Kubernetes-манифесты, Helm-чарты и файлы Docker Compose. Содержимое этих файлов задавалось автором в промпте.
+
 ## Изучите [README.md](.\README.md) файл и структуру проекта.
 
 # Задание 1
@@ -317,7 +324,7 @@ cat .docker/config.json | base64
 #### Шаг 3
 Добавьте сюда скриншота вывода при вызове http://cinemaabyss.example.com/api/movies и  скриншот вывода event-service после вызова тестов.
 
-![Screenshot](assets/logs_screen.png)
+![Задание 3: ответ API по HTTP и обработка событий](assets/task3_result.png)
 
 
 # Задание 4
@@ -393,6 +400,8 @@ minikube tunnel
 Потом вызовите 
 http://cinemaabyss.example.com/api/movies
 и приложите скриншот развертывания helm и вывода http://cinemaabyss.example.com/api/movies
+
+![Задание 4: ответ API по HTTP и обработка событий после установки Helm](assets/task4_result.png)
 
 ### Выполнение задания 4
 
