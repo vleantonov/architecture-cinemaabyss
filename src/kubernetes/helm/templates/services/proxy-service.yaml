@@ -20,12 +20,33 @@ spec:
       maxUnavailable: 0
   template:
     metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
         app: proxy-service
     spec:
       containers:
       - name: proxy-service
-        ..... тут
+        image: "{{ .Values.proxyService.image.repository }}:{{ .Values.proxyService.image.tag }}"
+        imagePullPolicy: {{ .Values.proxyService.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.proxyService.service.targetPort }}
+        env:
+        - name: PORT
+          value: {{ .Values.proxyService.service.targetPort | quote }}
+        envFrom:
+        - configMapRef:
+            name: cinemaabyss-config
+        resources:
+          {{- toYaml .Values.proxyService.resources | nindent 10 }}
+        readinessProbe:
+          tcpSocket:
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+      imagePullSecrets:
+      - name: dockerconfigjson
 ---
 apiVersion: v1
 kind: Service
@@ -38,5 +59,10 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   selector:
-    ... и тут
+    app: proxy-service
+  ports:
+  - name: http
+    port: {{ .Values.proxyService.service.port }}
+    targetPort: http
+  type: {{ .Values.proxyService.service.type }}
 {{- end }}
