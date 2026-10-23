@@ -3,12 +3,10 @@ kind: Ingress
 metadata:
   name: cinemaabyss-ingress
   namespace: cinemaabyss
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
-  ingressClassName: traefik
-  tls:
-    - hosts:
-        - cinemaabyss.example.com
-      secretName: cinemaabyss-tls
+  ingressClassName: nginx
   rules:
     - host: cinemaabyss.example.com
       http:

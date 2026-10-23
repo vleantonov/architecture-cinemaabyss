@@ -5,7 +5,8 @@ global:
 
 # Image pull secrets
 imagePullSecrets:
-  dockerconfigjson: ewoJImF1dGhzIjogewoJCSJnaGNyLmlvIjogewoJCQkiYXV0aCI6
+  # Base64 of {"auths":{}}; no credentials for public images.
+  dockerconfigjson: eyJhdXRocyI6e319
 # Database configuration
 database:
   host: postgres
@@ -53,7 +54,7 @@ monolith:
 proxyService:
   enabled: true
   image:
-    repository: ghcr.io/db-exp/cinemaabysstest/proxy-service
+    repository: ghcr.io/vleantonov/architecture-cinemaabyss/proxy-service
     tag: latest
     pullPolicy: Always
   replicas: 1
@@ -92,8 +93,11 @@ moviesService:
 # Events service configuration
 eventsService:
   enabled: true
+  kafka:
+    brokers: kafka:9092
+    groupId: cinemaabyss-events
   image:
-    repository: ghcr.io/db-exp/cinemaabysstest/events-service
+    repository: ghcr.io/vleantonov/architecture-cinemaabyss/events-service
     tag: latest
     pullPolicy: Always
   replicas: 1
@@ -182,4 +186,4 @@ ingress:
 config:
   # Strangler Fig configuration
   gradualMigration: "true"
-  moviesMigrationPercent: "100"
+  moviesMigrationPercent: "50"
