@@ -173,6 +173,10 @@ ingress:
   hosts:
     - host: cinemaabyss.example.com
       paths:
+        - path: /api/movies/health
+          pathType: Exact
+          service: movies-service
+          port: 8081
         - path: /
           pathType: Prefix
           service: proxy-service
