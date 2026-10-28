@@ -8,6 +8,11 @@ on:
         type: boolean
         required: true
         default: false
+      publish_latest:
+        description: 'Also tag latest from the selected branch (requires publish=true to push)'
+        type: boolean
+        required: true
+        default: false
   pull_request:
     branches: [ main, master ]
   push:
@@ -76,7 +81,7 @@ jobs:
           tags: |
             type=raw,value=pr-${{ github.event.number }}-{{sha}},enable=${{ github.event_name == 'pull_request' }}
             type=sha,format=short,enable=${{ github.event_name != 'pull_request' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.publish_latest) }}
             type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
 

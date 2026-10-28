@@ -17,9 +17,17 @@ Before installing, wait for all four application images to be published by the
   service, for example `pr-5-6b68ef2`. PR builds do not update `latest`.
 - A push of source changes to `main` publishes `latest` and `sha-<commit>`.
 - A manual run with `publish=true` publishes `sha-<commit>`; it also publishes
-  `latest` when run on `main`. With `publish=false`, it only checks the build.
+  `latest` when run on `main` or when `publish_latest=true` is explicitly selected.
+  With `publish=false`, it only checks the build, including when `publish_latest=true`.
 - Releases publish version tags and `sha-<commit>`, without updating `latest`.
 - Fork and Dependabot PRs only check builds, without publishing images.
+
+To publish `latest` from the `cinema` branch manually:
+
+```bash
+gh workflow run docker-build-push.yml --ref cinema \
+  -F publish=true -F publish_latest=true --repo vleantonov/architecture-cinemaabyss
+```
 
 Verify that the selected tag exists for all four packages under
 `ghcr.io/vleantonov/architecture-cinemaabyss/{monolith,movies-service,events-service,proxy-service}`.
