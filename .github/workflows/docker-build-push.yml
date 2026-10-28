@@ -24,12 +24,15 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  MONOLITH_IMAGE_NAME: ${{ github.repository }}/monolith
+  MOVIES_SERVICE_IMAGE_NAME: ${{ github.repository }}/movies-service
+  EVENTS_SERVICE_IMAGE_NAME: ${{ github.repository }}/events-service
+  PROXY_SERVICE_IMAGE_NAME: ${{ github.repository }}/proxy-service
   DOCKER_METADATA_PR_HEAD_SHA: 'true'
   DOCKER_METADATA_SHORT_SHA_LENGTH: 7
 
 jobs:
-  build:
-    name: Build Docker (${{ matrix.service }})
+  build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,18 +40,6 @@ jobs:
     env:
       # Fork and Dependabot PRs are built without registry credentials or publication.
       PUBLISH_IMAGES: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish) && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')) }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - service: monolith
-            context: ./src/monolith
-          - service: movies-service
-            context: ./src/microservices/movies
-          - service: events-service
-            context: ./src/microservices/events
-          - service: proxy-service
-            context: ./src/microservices/proxy
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -71,11 +62,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract image metadata
-        id: meta
+      - name: Extract metadata (tags, labels) for Monolith
+        id: meta-monolith
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
+          images: ${{ env.REGISTRY }}/${{ env.MONOLITH_IMAGE_NAME }}
           # Never infer latest from a PR or release tag.
           flavor: latest=false
           tags: |
@@ -85,13 +76,88 @@ jobs:
             type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
 
-      - name: Build and optionally push Docker image
+      - name: Build and optionally push Monolith Docker image
         uses: docker/build-push-action@v7
         with:
-          context: ${{ matrix.context }}
+          context: ./src/monolith
           platforms: linux/amd64,linux/arm64
           push: ${{ env.PUBLISH_IMAGES == 'true' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          tags: ${{ steps.meta-monolith.outputs.tags }}
+          labels: ${{ steps.meta-monolith.outputs.labels }}
+          cache-from: type=gha,scope=monolith
+          cache-to: type=gha,mode=max,scope=monolith
+
+      - name: Extract metadata (tags, labels) for Movies Service
+        id: meta-movies
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.MOVIES_SERVICE_IMAGE_NAME }}
+          # Never infer latest from a PR or release tag.
+          flavor: latest=false
+          tags: |
+            type=raw,value=pr-${{ github.event.number }}-{{sha}},enable=${{ github.event_name == 'pull_request' }}
+            type=sha,format=short,enable=${{ github.event_name != 'pull_request' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.publish_latest) }}
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
+
+      - name: Build and optionally push Movies Service Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./src/microservices/movies
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUBLISH_IMAGES == 'true' }}
+          tags: ${{ steps.meta-movies.outputs.tags }}
+          labels: ${{ steps.meta-movies.outputs.labels }}
+          cache-from: type=gha,scope=movies-service
+          cache-to: type=gha,mode=max,scope=movies-service
+
+      - name: Extract metadata (tags, labels) for Events Service
+        id: meta-events
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.EVENTS_SERVICE_IMAGE_NAME }}
+          # Never infer latest from a PR or release tag.
+          flavor: latest=false
+          tags: |
+            type=raw,value=pr-${{ github.event.number }}-{{sha}},enable=${{ github.event_name == 'pull_request' }}
+            type=sha,format=short,enable=${{ github.event_name != 'pull_request' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.publish_latest) }}
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
+
+      - name: Build and optionally push Events Service Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./src/microservices/events
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUBLISH_IMAGES == 'true' }}
+          tags: ${{ steps.meta-events.outputs.tags }}
+          labels: ${{ steps.meta-events.outputs.labels }}
+          cache-from: type=gha,scope=events-service
+          cache-to: type=gha,mode=max,scope=events-service
+
+      - name: Extract metadata (tags, labels) for Proxy Service
+        id: meta-proxy
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.PROXY_SERVICE_IMAGE_NAME }}
+          # Never infer latest from a PR or release tag.
+          flavor: latest=false
+          tags: |
+            type=raw,value=pr-${{ github.event.number }}-{{sha}},enable=${{ github.event_name == 'pull_request' }}
+            type=sha,format=short,enable=${{ github.event_name != 'pull_request' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.publish_latest) }}
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
+
+      - name: Build and optionally push Proxy Service Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./src/microservices/proxy
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUBLISH_IMAGES == 'true' }}
+          tags: ${{ steps.meta-proxy.outputs.tags }}
+          labels: ${{ steps.meta-proxy.outputs.labels }}
+          cache-from: type=gha,scope=proxy-service
+          cache-to: type=gha,mode=max,scope=proxy-service
