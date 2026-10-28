@@ -10,20 +10,69 @@ This Helm chart deploys the CinemaAbyss application on a Kubernetes cluster.
 
 ## Installing the Chart
 
-To install the chart with the release name `cinemaabyss`:
+Before installing, wait for all four application images to be published by the
+`Docker Build and Push` workflow:
+
+- A PR from this repository publishes `pr-<number>-<7-character-head-SHA>` for each
+  service, for example `pr-5-6b68ef2`. PR builds do not update `latest`.
+- A push of source changes to `main` publishes `latest` and `sha-<commit>`.
+- A manual run with `publish=true` publishes `sha-<commit>`; it also publishes
+  `latest` when run on `main` or when `publish_latest=true` is explicitly selected.
+  With `publish=false`, it only checks the build, including when `publish_latest=true`.
+- Releases publish version tags and `sha-<commit>`, without updating `latest`.
+- Fork and Dependabot PRs only check builds, without publishing images.
+
+To publish `latest` from the `cinema` branch manually:
 
 ```bash
-helm install cinemaabyss ./cinemaabyss
+gh workflow run docker-build-push.yml --ref cinema \
+  -F publish=true -F publish_latest=true --repo vleantonov/architecture-cinemaabyss
+```
+
+Verify that the selected tag exists for all four packages under
+`ghcr.io/vleantonov/architecture-cinemaabyss/{monolith,movies-service,events-service,proxy-service}`.
+
+The chart and the plain Kubernetes manifests use these same repositories and the
+`latest` tag with `imagePullPolicy: Always`. PostgreSQL, Kafka and ZooKeeper keep
+their upstream images. Build and publish using the [repository workflow](../../../.github/workflows/docker-build-push.yml).
+
+Run from the repository root to install the chart with the release name `cinemaabyss`:
+
+```bash
+helm upgrade --install cinemaabyss ./src/kubernetes/helm --namespace cinemaabyss --create-namespace --wait
+```
+
+To test a published PR build, override all four application tags (replace the
+example with the tag from the successful PR build):
+
+```bash
+CINEMA_IMAGE_TAG=pr-5-6b68ef2
+helm upgrade --install cinemaabyss ./src/kubernetes/helm --namespace cinemaabyss --create-namespace --wait \
+  --set-string monolith.image.tag="$CINEMA_IMAGE_TAG" \
+  --set-string moviesService.image.tag="$CINEMA_IMAGE_TAG" \
+  --set-string eventsService.image.tag="$CINEMA_IMAGE_TAG" \
+  --set-string proxyService.image.tag="$CINEMA_IMAGE_TAG"
 ```
 
 The command deploys CinemaAbyss on the Kubernetes cluster with default configuration. The [Parameters](#parameters) section lists the parameters that can be configured during installation.
+
+Publishing a new `latest` does not restart existing Pods. After a successful
+publication, restart the application Deployments to pull the updated images:
+
+```bash
+kubectl -n cinemaabyss rollout restart deployment/monolith deployment/movies-service \
+  deployment/events-service deployment/proxy-service
+for service in monolith movies-service events-service proxy-service; do
+  kubectl -n cinemaabyss rollout status "deployment/$service" --timeout=180s || exit 1
+done
+```
 
 ## Uninstalling the Chart
 
 To uninstall/delete the `cinemaabyss` deployment:
 
 ```bash
-helm uninstall cinemaabyss
+helm uninstall cinemaabyss --namespace cinemaabyss
 ```
 
 ## Parameters
@@ -60,7 +109,7 @@ helm uninstall cinemaabyss
 | Name                           | Description                                     | Value           |
 |--------------------------------|-------------------------------------------------|-----------------|
 | `monolith.enabled`             | Enable monolith deployment                      | `true`          |
-| `monolith.image.repository`    | Monolith image repository                       | `ghcr.io/db-exp/cinemaabysstest/monolith` |
+| `monolith.image.repository`    | Monolith image repository                       | `ghcr.io/vleantonov/architecture-cinemaabyss/monolith` |
 | `monolith.image.tag`           | Monolith image tag                              | `latest`        |
 | `monolith.image.pullPolicy`    | Monolith image pull policy                      | `Always`        |
 | `monolith.replicas`            | Number of monolith replicas                     | `1`             |
@@ -77,7 +126,7 @@ helm uninstall cinemaabyss
 | Name                           | Description                                     | Value           |
 |--------------------------------|-------------------------------------------------|-----------------|
 | `proxyService.enabled`         | Enable proxy service deployment                 | `true`          |
-| `proxyService.image.repository`| Proxy service image repository                  | `ghcr.io/db-exp/cinemaabysstest/proxy-service` |
+| `proxyService.image.repository`| Proxy service image repository                  | `ghcr.io/vleantonov/architecture-cinemaabyss/proxy-service` |
 | `proxyService.image.tag`       | Proxy service image tag                         | `latest`        |
 | `proxyService.image.pullPolicy`| Proxy service image pull policy                 | `Always`        |
 | `proxyService.replicas`        | Number of proxy service replicas                | `1`             |
@@ -94,7 +143,7 @@ helm uninstall cinemaabyss
 | Name                           | Description                                     | Value           |
 |--------------------------------|-------------------------------------------------|-----------------|
 | `moviesService.enabled`        | Enable movies service deployment                | `true`          |
-| `moviesService.image.repository`| Movies service image repository                | `ghcr.io/db-exp/cinemaabysstest/movies-service` |
+| `moviesService.image.repository`| Movies service image repository                | `ghcr.io/vleantonov/architecture-cinemaabyss/movies-service` |
 | `moviesService.image.tag`      | Movies service image tag                        | `latest`        |
 | `moviesService.image.pullPolicy`| Movies service image pull policy               | `Always`        |
 | `moviesService.replicas`       | Number of movies service replicas               | `1`             |
@@ -111,7 +160,7 @@ helm uninstall cinemaabyss
 | Name                           | Description                                     | Value           |
 |--------------------------------|-------------------------------------------------|-----------------|
 | `eventsService.enabled`        | Enable events service deployment                | `true`          |
-| `eventsService.image.repository`| Events service image repository                | `ghcr.io/db-exp/cinemaabysstest/events-service` |
+| `eventsService.image.repository`| Events service image repository                | `ghcr.io/vleantonov/architecture-cinemaabyss/events-service` |
 | `eventsService.image.tag`      | Events service image tag                        | `latest`        |
 | `eventsService.image.pullPolicy`| Events service image pull policy               | `Always`        |
 | `eventsService.replicas`       | Number of events service replicas               | `1`             |

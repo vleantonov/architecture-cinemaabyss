@@ -1,0 +1,98 @@
+@startuml CinemaAbyss_Containers_ToBe
+!include <C4/C4_Container>
+title КиноБездна — C4 Containers · ToBe\nПользователи → клиенты → Gateway → сервисы → базы
+LAYOUT_TOP_DOWN()
+skinparam backgroundColor #FFFFFF
+skinparam linetype ortho
+skinparam nodesep 180
+skinparam ranksep 320
+skinparam padding 10
+skinparam ArrowFontSize 13
+skinparam maxMessageSize 280
+skinparam wrapWidth 260
+skinparam packageTitleAlignment left
+AddRelTag("async", $lineStyle=DashedLine())
+
+Person(customer, "Пользователи")
+System_Boundary(cinema, "КиноБездна") {
+    together {
+        Container(web, "Веб-клиент", "Web / SPA")
+        Container(mobile, "Мобильный клиент", "iOS / Android")
+        Container(tv, "ТВ-клиент", "Smart TV")
+    }
+    Container(gateway, "API Gateway", "HTTPS / JWT / Kafka producer", "Проверка токена и запросов; user_id из JWT")
+    Boundary(core, "Основные сервисы", "Группа контейнеров") {
+        together {
+            Container(users, "Сервис пользователей", "Go", "Профили, вход и токены")
+            Container(movies, "Фильмы и оценки", "Go", "Каталог, оценки и отзывы")
+            Container(subscriptions, "Сервис подписок", "Go", "Тариф и срок подписки")
+            Container(payments, "Сервис платежей", "Go", "Платежи и фоновая оплата")
+        }
+        together {
+            ContainerDb(users_db, "БД пользователей", "PostgreSQL")
+            ContainerDb(movies_db, "БД фильмов и оценок", "PostgreSQL")
+            ContainerDb(subscriptions_db, "БД подписок", "PostgreSQL")
+            ContainerDb(payments_db, "БД платежей", "PostgreSQL")
+            ContainerDb(posters, "Бакет постеров", "S3")
+        }
+    }
+    Boundary(event_processing, "Обработка событий", "Группа контейнеров") {
+        ContainerQueue(kafka, "Брокер событий", "Apache Kafka")
+        Container(events, "Events Service", "Go", "Сбор событий, история; фоновая отправка рекомендаций")
+        ContainerDb(events_db, "Все события", "ClickHouse")
+    }
+}
+System_Ext(online_cinema, "Онлайн-кинотеатр")
+System_Ext(payment_provider, "Платёжная система")
+System_Ext(recommendations, "Рекомендательная система")
+
+Lay_R(web, mobile)
+Lay_R(mobile, tv)
+Lay_R(users, movies)
+Lay_R(movies, subscriptions)
+Lay_R(subscriptions, payments)
+Lay_R(users_db, movies_db)
+Lay_R(movies_db, subscriptions_db)
+Lay_R(subscriptions_db, payments_db)
+Lay_R(payments_db, kafka)
+Lay_R(users_db, kafka)
+Lay_R(movies_db, kafka)
+Lay_R(subscriptions_db, kafka)
+Lay_L(posters, users_db)
+
+Rel_D(customer, web, "Использует", "HTTPS")
+Rel_D(customer, mobile, "Использует", "UI")
+Rel_D(customer, tv, "Использует", "UI")
+Rel_D(web, gateway, "API и токены", "HTTPS / JSON")
+Rel_D(mobile, gateway, "API и токены", "HTTPS / JSON")
+Rel_D(tv, gateway, "API и токены", "HTTPS / JSON")
+Rel_D(gateway, users, "Профили, вход; JWKS", "HTTP / JSON")
+Rel_D(gateway, movies, "Каталог и оценки", "HTTP / JSON")
+Rel_D(gateway, subscriptions, "Подписки", "HTTP / JSON")
+Rel_D(gateway, payments, "Платежи; webhook", "HTTP / JSON")
+Rel_D(gateway, events, "Чтение истории", "HTTP / JSON")
+Rel_D(users, users_db, "Данные", "SQL / транзакция")
+Rel_D(movies, movies_db, "Данные", "SQL / транзакция")
+Rel_D(subscriptions, subscriptions_db, "Данные", "SQL / транзакция")
+Rel_D(payments, payments_db, "Данные", "SQL / транзакция")
+Rel_D(events, events_db, "Запись событий; чтение", "HTTP / SQL")
+
+Rel_D(gateway, kafka, "Просмотры", "Kafka / views.raw", $tags="async")
+Rel_D(users, kafka, "События Users", "Kafka / domain.events", $tags="async")
+Rel_D(movies, kafka, "Фильмы и оценки", "Kafka / domain.events", $tags="async")
+Rel_D(subscriptions, kafka, "Подписки", "Kafka / domain.events", $tags="async")
+BiRel_D(payments, kafka, "События → Kafka\nProcessPayment ↔ Payments", "Kafka", $tags="async")
+BiRel_D(kafka, events, "События → Events\nViewAccepted → Kafka", "Kafka", $tags="async")
+Rel_U(events, movies, "Проверка фильма", "HTTP")
+
+Rel_R(events, recommendations, "События (фоново)", "HTTPS", $tags="async")
+Rel_R(payments, payment_provider, "Оплата / статус", "HTTPS / idempotency key")
+Rel_U(payment_provider, gateway, "Webhook результата", "HTTPS / подпись")
+Rel_R(movies, online_cinema, "Метаданные и постеры", "HTTPS")
+Rel_D(movies, posters, "Загружает постеры", "HTTPS / S3 PutObject")
+Rel_D(web, posters, "Постер по poster_url", "HTTPS GET")
+Rel_D(mobile, posters, "Постер по poster_url", "HTTPS GET")
+Rel_D(tv, posters, "Постер по poster_url", "HTTPS GET")
+
+footer Сплошные связи — синхронные HTTP/SQL; пунктир — Kafka и фоновая доставка по HTTPS.
+@enduml
