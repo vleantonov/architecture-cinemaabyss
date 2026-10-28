@@ -26,6 +26,7 @@ spec:
       containers:
         - name: events-service
           image: ghcr.io/vleantonov/architecture-cinemaabyss/events-service:latest
+          imagePullPolicy: Always
 
           ports:
             - name: http
