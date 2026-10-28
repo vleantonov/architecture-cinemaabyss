@@ -10,10 +10,19 @@ This Helm chart deploys the CinemaAbyss application on a Kubernetes cluster.
 
 ## Installing the Chart
 
-Before installing, build and publish all four application images using the repository's
-`Docker Build and Push` workflow with `publish=true`. Wait for the run to succeed
-and verify that `ghcr.io/vleantonov/architecture-cinemaabyss/{monolith,movies-service,events-service,proxy-service}:latest`
-is available. Pull-request build checks do not publish images.
+Before installing, wait for all four application images to be published by the
+`Docker Build and Push` workflow:
+
+- A PR from this repository publishes `pr-<number>-<7-character-head-SHA>` for each
+  service, for example `pr-5-6b68ef2`. PR builds do not update `latest`.
+- A push of source changes to `main` publishes `latest` and `sha-<commit>`.
+- A manual run with `publish=true` publishes `sha-<commit>`; it also publishes
+  `latest` when run on `main`. With `publish=false`, it only checks the build.
+- Releases publish version tags and `sha-<commit>`, without updating `latest`.
+- Fork and Dependabot PRs only check builds, without publishing images.
+
+Verify that the selected tag exists for all four packages under
+`ghcr.io/vleantonov/architecture-cinemaabyss/{monolith,movies-service,events-service,proxy-service}`.
 
 The chart and the plain Kubernetes manifests use these same repositories and the
 `latest` tag with `imagePullPolicy: Always`. PostgreSQL, Kafka and ZooKeeper keep
@@ -23,6 +32,18 @@ Run from the repository root to install the chart with the release name `cinemaa
 
 ```bash
 helm upgrade --install cinemaabyss ./src/kubernetes/helm --namespace cinemaabyss --create-namespace --wait
+```
+
+To test a published PR build, override all four application tags (replace the
+example with the tag from the successful PR build):
+
+```bash
+CINEMA_IMAGE_TAG=pr-5-6b68ef2
+helm upgrade --install cinemaabyss ./src/kubernetes/helm --namespace cinemaabyss --create-namespace --wait \
+  --set-string monolith.image.tag="$CINEMA_IMAGE_TAG" \
+  --set-string moviesService.image.tag="$CINEMA_IMAGE_TAG" \
+  --set-string eventsService.image.tag="$CINEMA_IMAGE_TAG" \
+  --set-string proxyService.image.tag="$CINEMA_IMAGE_TAG"
 ```
 
 The command deploys CinemaAbyss on the Kubernetes cluster with default configuration. The [Parameters](#parameters) section lists the parameters that can be configured during installation.

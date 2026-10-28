@@ -19,18 +19,19 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  MONOLITH_IMAGE_NAME: ${{ github.repository }}/monolith
-  MOVIES_SERVICE_IMAGE_NAME: ${{ github.repository }}/movies-service
-  EVENTS_SERVICE_IMAGE_NAME: ${{ github.repository }}/events-service
-  PROXY_SERVICE_IMAGE_NAME: ${{ github.repository }}/proxy-service
+  DOCKER_METADATA_PR_HEAD_SHA: 'true'
+  DOCKER_METADATA_SHORT_SHA_LENGTH: 7
 
 jobs:
-  build-check:
+  build:
     name: Build Docker (${{ matrix.service }})
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !inputs.publish)
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
+    env:
+      # Fork and Dependabot PRs are built without registry credentials or publication.
+      PUBLISH_IMAGES: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish) && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -46,32 +47,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v7
         with:
-          context: ${{ matrix.context }}
-          platforms: linux/amd64,linux/arm64
-          push: false
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
-
-  build-and-push:
-    if: github.event_name == 'push' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.publish)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
+          # The PR tag identifies the source commit, not GitHub's temporary merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -80,100 +59,34 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to the Container registry
+        if: env.PUBLISH_IMAGES == 'true'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Monolith
-        id: meta-monolith
+      - name: Extract image metadata
+        id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ env.MONOLITH_IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
+          # Never infer latest from a PR or release tag.
+          flavor: latest=false
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
-            type=ref,event=branch
-            latest
+            type=raw,value=pr-${{ github.event.number }}-{{sha}},enable=${{ github.event_name == 'pull_request' }}
+            type=sha,format=short,enable=${{ github.event_name != 'pull_request' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
 
-      - name: Build and push Monolith Docker image
+      - name: Build and optionally push Docker image
         uses: docker/build-push-action@v7
         with:
-          context: ./src/monolith
+          context: ${{ matrix.context }}
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-monolith.outputs.tags }}
-          labels: ${{ steps.meta-monolith.outputs.labels }}
-          cache-from: type=gha,scope=monolith
-          cache-to: type=gha,mode=max,scope=monolith
-
-      - name: Extract metadata (tags, labels) for Movies Service
-        id: meta-movies
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.MOVIES_SERVICE_IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
-            type=ref,event=branch
-            latest
-
-      - name: Build and push Movies Service Docker image
-        uses: docker/build-push-action@v7
-        with:
-          context: ./src/microservices/movies
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-movies.outputs.tags }}
-          labels: ${{ steps.meta-movies.outputs.labels }}
-          cache-from: type=gha,scope=movies-service
-          cache-to: type=gha,mode=max,scope=movies-service
-
-      - name: Extract metadata (tags, labels) for Events Service
-        id: meta-events
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.EVENTS_SERVICE_IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
-            type=ref,event=branch
-            latest
-
-      - name: Build and push Events Service Docker image
-        uses: docker/build-push-action@v7
-        with:
-          context: ./src/microservices/events
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-events.outputs.tags }}
-          labels: ${{ steps.meta-events.outputs.labels }}
-          cache-from: type=gha,scope=events-service
-          cache-to: type=gha,mode=max,scope=events-service
-
-      - name: Extract metadata (tags, labels) for Proxy Service
-        id: meta-proxy
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.PROXY_SERVICE_IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
-            type=ref,event=branch
-            latest
-
-      - name: Build and push Proxy Service Docker image
-        uses: docker/build-push-action@v7
-        with:
-          context: ./src/microservices/proxy
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-proxy.outputs.tags }}
-          labels: ${{ steps.meta-proxy.outputs.labels }}
-          cache-from: type=gha,scope=proxy-service
-          cache-to: type=gha,mode=max,scope=proxy-service
+          push: ${{ env.PUBLISH_IMAGES == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
