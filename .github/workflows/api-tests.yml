@@ -2,12 +2,7 @@ name: API Tests
 
 on:
   push:
-    branches: [ main, master, cinema ]
-    # Workflow-only updates can precede the service implementation in main.
-    paths:
-      - 'src/**'
-      - 'docker-compose.yml'
-      - 'tests/postman/**'
+    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
